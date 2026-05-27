@@ -20,7 +20,8 @@ Place, Fifth Floor, Boston, MA  02110 - 1301  USA
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_SWIZZLE
 
-
+#include <vector>
+#include"Enemy.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -38,8 +39,7 @@ float speed_y=0;
 float aspectRatio=1;
 float deltaTime = 0.0f;
 
-
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.5f, 3.0f);
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.8f, 3.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
@@ -49,12 +49,45 @@ float pitch = 0.0f;
 float lastX = 250.0f, lastY = 250.0f; 
 bool firstMouse = true;
 
-Model* model;
+Model* skeleton_model;
 
 ShaderProgram *sp;
 
 GLuint tex0;
 GLuint tex1;
+
+
+bool checkCollision(const AABB& a, const AABB& b) {
+	return (a.min.x <= b.max.x && a.max.x >= b.min.x) &&
+		(a.min.y <= b.max.y && a.max.y >= b.min.y) &&
+		(a.min.z <= b.max.z && a.max.z >= b.min.z);
+}
+
+
+void player_input(GLFWwindow* window, float cameraSpeed, std::vector<Enemy*> enemies) {
+
+	glm::vec3 lastPos = cameraPos;
+
+	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+		cameraPos += cameraSpeed * cameraFront;
+	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+		cameraPos -= cameraSpeed * cameraFront;
+	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+		cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+		cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+
+	AABB playerBox;
+	playerBox.min = cameraPos - glm::vec3(0.25f, 0.0f, 0.25f);
+	playerBox.max = cameraPos + glm::vec3(0.25f, 1.8f, 0.25f);
+
+	for (const auto& enemy : enemies) {
+		if (checkCollision(playerBox, enemy->getCollider())) {
+			cameraPos = lastPos;
+			return;
+		}
+	}
+}
 
 //Procedura obsługi błędów
 void error_callback(int error, const char* description) {
@@ -136,40 +169,35 @@ void initOpenGLProgram(GLFWwindow* window) {
 	sp=new ShaderProgram("v_simplest.glsl",NULL,"f_simplest.glsl");
 	tex0 = readTexture("skeleton_diffuse.png");
 	tex1 = readTexture("skeleton_specular.jpeg");
-	model = new Model("skeleton.fbx", &tex0, &tex1);
+	skeleton_model = new Model("skeleton.fbx", &tex0, &tex1);
+
 }
 
 
 //Zwolnienie zasobów zajętych przez program
 void freeOpenGLProgram(GLFWwindow* window) {
     //************Tutaj umieszczaj kod, który należy wykonać po zakończeniu pętli głównej************
-	delete model;
+	delete skeleton_model;
     delete sp;
 }
 
-
-
-
 //Procedura rysująca zawartość sceny
-void drawScene(GLFWwindow* window) { // Usunięte argumenty kątów
+void drawScene(GLFWwindow* window, std::vector<Enemy*> enemies) {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	glm::mat4 V = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 	glm::mat4 P = glm::perspective(glm::radians(45.0f), aspectRatio, 0.01f, 100.0f);
-	glm::mat4 M = glm::mat4(1.0f);
-
-	M = glm::rotate(M, glm::radians(-90.f), glm::vec3(1, 0, 0));
-
-	M = glm::scale(M, glm::vec3(0.5f, 0.5f, 0.5f));
 
 	sp->use();
 	glUniformMatrix4fv(sp->u("P"), 1, false, glm::value_ptr(P));
 	glUniformMatrix4fv(sp->u("V"), 1, false, glm::value_ptr(V));
-	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(M));
 
-	model->Draw(sp->id);
+	for (int i = 0; i < enemies.size(); i++) {
+		enemies[i]->update(deltaTime, cameraPos);
+		enemies[i]->draw(sp);
+	}
 
 	glfwSwapBuffers(window);
 }
@@ -177,6 +205,7 @@ void drawScene(GLFWwindow* window) { // Usunięte argumenty kątów
 int main(void)
 {
 	GLFWwindow* window; //Wskaźnik na obiekt reprezentujący okno
+	std::vector<Enemy*> enemies;
 
 	glfwSetErrorCallback(error_callback);//Zarejestruj procedurę obsługi błędów
 
@@ -203,7 +232,10 @@ int main(void)
 	}
 
 	initOpenGLProgram(window); //Operacje inicjujące
+	enemies.push_back(new Enemy(skeleton_model, glm::vec3(0.0f, 0.0f, 0.0f)));
 	glfwSetTime(0); //Zeruj timer
+
+
 	while (!glfwWindowShouldClose(window)) 
 	{
 		float currentFrame = glfwGetTime();
@@ -213,16 +245,9 @@ int main(void)
 
 		float cameraSpeed = 5.f * deltaTime;
 
-		if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-			cameraPos += cameraSpeed * cameraFront;
-		if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-			cameraPos -= cameraSpeed * cameraFront;
-		if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-			cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-		if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-			cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+		player_input(window, cameraSpeed, enemies);
 
-		drawScene(window); 
+		drawScene(window, enemies); 
 		glfwPollEvents();
 	}
 
