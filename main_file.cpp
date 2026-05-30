@@ -19,9 +19,8 @@ Place, Fifth Floor, Boston, MA  02110 - 1301  USA
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_SWIZZLE
-
+#include <random>
 #include <vector>
-#include"Enemy.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -33,6 +32,7 @@ Place, Fifth Floor, Boston, MA  02110 - 1301  USA
 #include "lodepng.h"
 #include "shaderprogram.h"
 #include "Model.h"
+#include "Enemy.h"
 
 float speed_x=0;
 float speed_y=0;
@@ -56,6 +56,12 @@ ShaderProgram *sp;
 GLuint tex0;
 GLuint tex1;
 
+glm::vec3 randomPosition(float radius) {
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_real_distribution<> dis(-radius, radius);
+	return glm::vec3(dis(gen), 0.0f, dis(gen));
+}
 
 bool checkCollision(const AABB& a, const AABB& b) {
 	return (a.min.x <= b.max.x && a.max.x >= b.min.x) &&
@@ -157,7 +163,7 @@ GLuint readTexture(const char* filename) {
 //Procedura inicjująca
 void initOpenGLProgram(GLFWwindow* window) {
 	//************Tutaj umieszczaj kod, który należy wykonać raz, na początku programu************
-	glClearColor(0,0,0,1);
+	glClearColor(1,1,1,1);
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_MULTISAMPLE);
 	glfwSetWindowSizeCallback(window,windowResizeCallback);
@@ -232,7 +238,7 @@ int main(void)
 	}
 
 	initOpenGLProgram(window); //Operacje inicjujące
-	enemies.push_back(new Enemy(skeleton_model, glm::vec3(0.0f, 0.0f, 0.0f)));
+	enemies.push_back(new Enemy(skeleton_model, randomPosition(10)));
 	glfwSetTime(0); //Zeruj timer
 
 
@@ -240,6 +246,10 @@ int main(void)
 	{
 		float currentFrame = glfwGetTime();
 		static float lastFrame = 0.0f;
+		if ((int(currentFrame) % 3 == 0) && (int(lastFrame)!=int(currentFrame))) {
+			enemies.push_back(new Enemy(skeleton_model, randomPosition(10)));
+		}
+		std::cout << int(currentFrame) << "			" << int(lastFrame) << std::endl;
 		deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
 
