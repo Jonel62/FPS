@@ -1,14 +1,8 @@
 #pragma once
 
+#include "colliders.h"
 #include "Model.h"
 #include "shaderprogram.h"
-#include <glm/ext/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-
-struct AABB {
-    glm::vec3 min;
-    glm::vec3 max;
-};
 
 class Enemy {
 private:

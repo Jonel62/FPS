@@ -19,6 +19,10 @@ Place, Fifth Floor, Boston, MA  02110 - 1301  USA
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_SWIZZLE
+#define WALL_THICKNESS 0.1f
+#define WALL_HEIGHT 5.0f
+#define WALL_LENGTH 100.0f
+
 #include <random>
 #include <vector>
 #include <GL/glew.h>
@@ -33,6 +37,8 @@ Place, Fifth Floor, Boston, MA  02110 - 1301  USA
 #include "shaderprogram.h"
 #include "Model.h"
 #include "Enemy.h"
+#include "colliders.h"
+#include "Wall.h"
 #include <corecrt_math_defines.h>
 
 float speed_x=0;
@@ -58,6 +64,7 @@ GLuint skeleton_diffuse;
 GLuint skeleton_specular;
 
 GLuint floor_diffuse;
+GLuint wall_diffuse;
 
 glm::vec3 randomPosition(float radius, glm::vec3 playerPos) {
 	static std::random_device rd;
@@ -72,14 +79,8 @@ glm::vec3 randomPosition(float radius, glm::vec3 playerPos) {
 	return glm::vec3(x+playerPos.x, 0.0f, y+playerPos.z);
 }
 
-bool checkCollision(const AABB& a, const AABB& b) {
-	return (a.min.x <= b.max.x && a.max.x >= b.min.x) &&
-		(a.min.y <= b.max.y && a.max.y >= b.min.y) &&
-		(a.min.z <= b.max.z && a.max.z >= b.min.z);
-}
 
-
-void player_input(GLFWwindow* window, float cameraSpeed, std::vector<Enemy*> enemies) {
+void player_input(GLFWwindow* window, float cameraSpeed, std::vector<Enemy*> enemies, std::vector<Wall*> walls) {
 
 	glm::vec3 lastPos = cameraPos;
 
@@ -95,6 +96,13 @@ void player_input(GLFWwindow* window, float cameraSpeed, std::vector<Enemy*> ene
 	AABB playerBox;
 	playerBox.min = cameraPos - glm::vec3(0.25f, 0.0f, 0.25f);
 	playerBox.max = cameraPos + glm::vec3(0.25f, 1.8f, 0.25f);
+
+	for (const auto& wall : walls) {
+		if (checkCollision(playerBox, wall->getCollider())) {
+			cameraPos = lastPos;
+			return;
+		}
+	}
 
 	for (const auto& enemy : enemies) {
 		if (checkCollision(playerBox, enemy->getCollider())) {
@@ -162,8 +170,11 @@ GLuint readTexture(const char* filename) {
     glTexImage2D(GL_TEXTURE_2D, 0, 4, width, height, 0,
         GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*)image.data());
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
     return tex;
 }
@@ -172,7 +183,7 @@ GLuint readTexture(const char* filename) {
 //Procedura inicjująca
 void initOpenGLProgram(GLFWwindow* window) {
 	//************Tutaj umieszczaj kod, który należy wykonać raz, na początku programu************
-	glClearColor(1,1,1,1);
+	glClearColor(0,0,0,1);
 	glEnable(GL_DEPTH_TEST);
 	glDisable(GL_MULTISAMPLE);
 	glfwSetWindowSizeCallback(window,windowResizeCallback);
@@ -187,6 +198,7 @@ void initOpenGLProgram(GLFWwindow* window) {
 	skeleton_model = new Model("skeleton.fbx", &skeleton_diffuse, &skeleton_specular);
 	
 	floor_diffuse = readTexture("floor.png");
+	wall_diffuse = readTexture("wall.png");
 }
 
 
@@ -198,17 +210,32 @@ void freeOpenGLProgram(GLFWwindow* window) {
 }
 
 //Procedura rysująca zawartość sceny
-void drawScene(GLFWwindow* window, std::vector<Enemy*> enemies) {
+void drawScene(GLFWwindow* window, std::vector<Enemy*> enemies, std::vector<Wall*> walls) {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	glm::mat4 V = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 	glm::mat4 P = glm::perspective(glm::radians(45.0f), aspectRatio, 0.01f, 100.0f);
 
+	// Przekazujemy pozycję gracza jako pozycję obserwatora
+	glUniform3fv(glGetUniformLocation(sp->id, "viewPos"), 1, glm::value_ptr(cameraPos));
+
+	glm::vec3 light1Pos(0.f, 2.0f, 100.f);
+	glm::vec3 light1Color(1.0f, 1.0f, 1.0f); 
+	glUniform3fv(glGetUniformLocation(sp->id, "light1.position"), 1, glm::value_ptr(light1Pos));
+	glUniform3fv(glGetUniformLocation(sp->id, "light1.color"), 1, glm::value_ptr(light1Color));
+
+	glm::vec3 light2Pos(5.0f, 2.0f, -100.0f);
+	glm::vec3 light2Color(1.0f, 0.5f, 0.0f); 
+	glUniform3fv(glGetUniformLocation(sp->id, "light2.position"), 1, glm::value_ptr(light2Pos));
+	glUniform3fv(glGetUniformLocation(sp->id, "light2.color"), 1, glm::value_ptr(light2Color));
+
 	sp->use();
 	glUniformMatrix4fv(sp->u("P"), 1, false, glm::value_ptr(P));
 	glUniformMatrix4fv(sp->u("V"), 1, false, glm::value_ptr(V));
+
+	for (int i = 0; i < walls.size(); i++) {
+		walls[i]->draw(sp);
+	}
 
 	for (int i = 0; i < enemies.size(); i++) {
 		enemies[i]->update(deltaTime, cameraPos);
@@ -222,6 +249,7 @@ int main(void)
 {
 	GLFWwindow* window; //Wskaźnik na obiekt reprezentujący okno
 	std::vector<Enemy*> enemies;
+	std::vector<Wall*> walls;
 
 	glfwSetErrorCallback(error_callback);//Zarejestruj procedurę obsługi błędów
 
@@ -250,22 +278,26 @@ int main(void)
 	initOpenGLProgram(window); //Operacje inicjujące
 	glfwSetTime(0); //Zeruj timer
 
-
+	walls.push_back(new Wall(glm::vec3(0.0f, -1.5f, .0f), glm::vec3(WALL_LENGTH, WALL_THICKNESS, WALL_LENGTH), floor_diffuse));
+	walls.push_back(new Wall(glm::vec3(0.0f, 0.0f, -50.0f), glm::vec3(WALL_LENGTH, WALL_HEIGHT, WALL_THICKNESS), wall_diffuse));
+	walls.push_back(new Wall(glm::vec3(0.0f, 0.0f, 50.0f), glm::vec3(WALL_LENGTH, WALL_HEIGHT, WALL_THICKNESS), wall_diffuse));
+	walls.push_back(new Wall(glm::vec3(-50.0f, 0.0f, 0.0f), glm::vec3(WALL_THICKNESS, WALL_HEIGHT, WALL_LENGTH), wall_diffuse));
+	walls.push_back(new Wall(glm::vec3(50.0f, 0.0f, 0.0f), glm::vec3(WALL_THICKNESS, WALL_HEIGHT, WALL_LENGTH), wall_diffuse));
 	while (!glfwWindowShouldClose(window)) 
 	{
 		float currentFrame = glfwGetTime();
 		static float lastFrame = 0.0f;
 		if ((int(currentFrame) % 3 == 0) && (int(currentFrame)!=int(lastFrame))) {
-			enemies.push_back(new Enemy(skeleton_model, randomPosition(20, cameraPos)));
+			enemies.push_back(new Enemy(skeleton_model, randomPosition(15, cameraPos)));
 		}
 		deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
 
 		float cameraSpeed = 5.f * deltaTime;
 
-		player_input(window, cameraSpeed, enemies);
+		player_input(window, cameraSpeed, enemies, walls);
 
-		drawScene(window, enemies); 
+		drawScene(window, enemies, walls); 
 		glfwPollEvents();
 	}
 

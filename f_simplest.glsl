@@ -1,31 +1,51 @@
-#version 330
+#version 330 core
+
+out vec4 FragColor;
+
+in vec3 FragPos;
+in vec3 Normal;
+in vec2 TexCoords;
+
+struct PointLight {
+    vec3 position;
+    vec3 color;
+};
+
+uniform PointLight light1;
+uniform PointLight light2;
 
 uniform sampler2D texture_diffuse;
-uniform sampler2D texture_specular;
+uniform vec3 viewPos;
 
-out vec4 pixelColor; //Zmienna wyjsciowa fragment shadera. Zapisuje sie do niej ostateczny (prawie) kolor piksela
+vec3 CalculatePointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
+    vec3 lightDir = normalize(light.position - fragPos);
 
-in vec4 ic; 
-in vec4 n;
-in vec4 l;
-in vec4 v;
-in vec2 iTexCoord0;
+    float ambientStrength = 0.15;
+    vec3 ambient = ambientStrength * light.color;
 
-void main(void) {
+    float diff = max(dot(normal, lightDir), 0.0);
+    vec3 diffuse = diff * light.color;
+    
+    float specularStrength = 0.5;
+    vec3 reflectDir = reflect(-lightDir, normal);
 
-	//Znormalizowane interpolowane wektory
-	vec4 ml = normalize(l);
-	vec4 mn = normalize(n);
-	vec4 mv = normalize(v);
-	//Wektor odbity
-	vec4 mr = reflect(-ml, mn);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+    vec3 specular = specularStrength * spec * light.color;
+    
+    return (ambient + diffuse + specular);
+}
 
-	//Parametry powierzchni
-	vec4 kd = texture(texture_diffuse, iTexCoord0); 
-	vec4 ks = texture(texture_specular, iTexCoord0);
+void main() {
+    vec3 norm = normalize(Normal);
+    vec3 viewDir = normalize(viewPos - FragPos);
 
-	//Obliczenie modelu oświetlenia
-	float nl = clamp(dot(mn, ml), 0, 1);
-	float rv = pow(clamp(dot(mr, mv), 0, 1),25);
-	pixelColor= vec4(kd.rgb * nl, kd.a) + vec4(ks.rgb*rv, 0);
+    vec3 textureColor = texture(texture_diffuse, TexCoords).rgb;
+
+    vec3 lightingResult = CalculatePointLight(light1, norm, FragPos, viewDir);
+    
+    lightingResult += CalculatePointLight(light2, norm, FragPos, viewDir);
+    
+    vec3 finalColor = lightingResult * textureColor;
+    
+    FragColor = vec4(finalColor, 1.0);
 }
