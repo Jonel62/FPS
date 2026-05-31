@@ -30,7 +30,7 @@ public:
     }
 
     void update(float deltaTime, glm::vec3 playerPos) {
-        position = glm::mix(glm::vec3(position.x, 0, position.z), glm::vec3(playerPos.x, 0, playerPos.z), deltaTime * 0.1f);
+        //position = glm::mix(glm::vec3(position.x, 0, position.z), glm::vec3(playerPos.x, 0, playerPos.z), deltaTime * 0.1f);
 		rotationY = atan2(playerPos.x - position.x, playerPos.z - position.z); 
         updateCollider();
     }

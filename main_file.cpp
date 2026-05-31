@@ -33,13 +33,14 @@ Place, Fifth Floor, Boston, MA  02110 - 1301  USA
 #include "shaderprogram.h"
 #include "Model.h"
 #include "Enemy.h"
+#include <corecrt_math_defines.h>
 
 float speed_x=0;
 float speed_y=0;
 float aspectRatio=1;
 float deltaTime = 0.0f;
 
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.8f, 3.0f);
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.8f, 0.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
@@ -53,14 +54,22 @@ Model* skeleton_model;
 
 ShaderProgram *sp;
 
-GLuint tex0;
-GLuint tex1;
+GLuint skeleton_diffuse;
+GLuint skeleton_specular;
 
-glm::vec3 randomPosition(float radius) {
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_real_distribution<> dis(-radius, radius);
-	return glm::vec3(dis(gen), 0.0f, dis(gen));
+GLuint floor_diffuse;
+
+glm::vec3 randomPosition(float radius, glm::vec3 playerPos) {
+	static std::random_device rd;
+	static std::mt19937 gen(rd());
+	std::uniform_real_distribution<float> dis(0.0f, 2.0f * M_PI);
+
+	float angle = dis(gen);
+
+	float x = radius * std::cos(angle);
+	float y = radius * std::sin(angle);
+
+	return glm::vec3(x+playerPos.x, 0.0f, y+playerPos.z);
 }
 
 bool checkCollision(const AABB& a, const AABB& b) {
@@ -173,10 +182,11 @@ void initOpenGLProgram(GLFWwindow* window) {
 
 
 	sp=new ShaderProgram("v_simplest.glsl",NULL,"f_simplest.glsl");
-	tex0 = readTexture("skeleton_diffuse.png");
-	tex1 = readTexture("skeleton_specular.jpeg");
-	skeleton_model = new Model("skeleton.fbx", &tex0, &tex1);
-
+	skeleton_diffuse = readTexture("skeleton_diffuse.png");
+	skeleton_specular = readTexture("skeleton_specular.jpeg");
+	skeleton_model = new Model("skeleton.fbx", &skeleton_diffuse, &skeleton_specular);
+	
+	floor_diffuse = readTexture("floor.png");
 }
 
 
@@ -238,7 +248,6 @@ int main(void)
 	}
 
 	initOpenGLProgram(window); //Operacje inicjujące
-	enemies.push_back(new Enemy(skeleton_model, randomPosition(10)));
 	glfwSetTime(0); //Zeruj timer
 
 
@@ -246,10 +255,9 @@ int main(void)
 	{
 		float currentFrame = glfwGetTime();
 		static float lastFrame = 0.0f;
-		if ((int(currentFrame) % 3 == 0) && (int(lastFrame)!=int(currentFrame))) {
-			enemies.push_back(new Enemy(skeleton_model, randomPosition(10)));
+		if ((int(currentFrame) % 3 == 0) && (int(currentFrame)!=int(lastFrame))) {
+			enemies.push_back(new Enemy(skeleton_model, randomPosition(20, cameraPos)));
 		}
-		std::cout << int(currentFrame) << "			" << int(lastFrame) << std::endl;
 		deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
 
