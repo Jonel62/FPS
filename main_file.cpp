@@ -264,7 +264,8 @@ void initOpenGLProgram(GLFWwindow* window) {
 
 	sp=new ShaderProgram("v_simplest.glsl",NULL,"f_simplest.glsl");
 	skeleton_diffuse = readTexture("skeleton_diffuse.png");
-	skeleton_specular = readTexture("skeleton_specular.jpeg");
+	skeleton_specular = readTexture("skeleton_diffuse.png");
+	//skeleton_specular = readTexture("skeleton_specular.jpeg");
 	skeleton_model = new Model("skeleton.fbx", &skeleton_diffuse, &skeleton_specular);
 	
 	floor_diffuse = readTexture("floor.png");
