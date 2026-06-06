@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="bullet.h" />
     <ClInclude Include="colliders.h" />
     <ClInclude Include="constants.h" />
     <ClInclude Include="Enemy.h" />

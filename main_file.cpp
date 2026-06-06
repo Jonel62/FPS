@@ -39,6 +39,7 @@ Place, Fifth Floor, Boston, MA  02110 - 1301  USA
 #include "Enemy.h"
 #include "colliders.h"
 #include "Wall.h"
+#include "bullet.h"
 #include <corecrt_math_defines.h>
 
 float speed_x=0;
@@ -66,6 +67,49 @@ GLuint skeleton_specular;
 GLuint floor_diffuse;
 GLuint wall_diffuse;
 
+bool spacewaspressed = false;
+
+int health = 100;
+
+void ereaseEnemiesandBullets(std::vector<Enemy*>* enemies, std::vector<Bullet*>* bullets) {
+	for (int i = 0; i < bullets->size(); i++) {
+		(*bullets)[i]->update(deltaTime);
+
+		if (!(*bullets)[i]->isActive()) {
+			continue;
+		}
+
+		for (int j = 0; j < enemies->size(); j++) {
+			if (checkCollision((*bullets)[i]->getCollider(), (*enemies)[j]->getCollider())) {
+				(*enemies)[j]->kill();
+				(*bullets)[i]->deactivate();
+				break;
+			}
+		}
+		glm::vec3 bulletPos = (*bullets)[i]->getPosition();
+		if (bulletPos.x > 50.0f || bulletPos.x < -50.0f ||
+			bulletPos.z > 50.0f || bulletPos.z < -50.0f){
+			(*bullets)[i]->deactivate();
+		}
+	}
+
+	enemies->erase(std::remove_if(enemies->begin(), enemies->end(), [](Enemy* e) {
+		if (!e->isAlive()) {
+			delete e;
+			return true;
+		}
+		return false;
+		}), enemies->end());
+
+	bullets->erase(std::remove_if(bullets->begin(), bullets->end(), [](Bullet* b) {
+		if (!b->isActive()) {
+			delete b;
+			return true;
+		}
+		return false;
+		}), bullets->end());
+}
+
 glm::vec3 randomPosition(float radius, glm::vec3 playerPos) {
 	static std::random_device rd;
 	static std::mt19937 gen(rd());
@@ -73,16 +117,35 @@ glm::vec3 randomPosition(float radius, glm::vec3 playerPos) {
 
 	float angle = dis(gen);
 
-	float x = radius * std::cos(angle);
-	float y = radius * std::sin(angle);
+	float x = radius * std::cos(angle) + playerPos.x;
+	float y = radius * std::sin(angle) + playerPos.z;
+	if (x > 50.0f) x = 50.0f;
+	if (x < -50.0f) x = -50.0f;
+	if (y > 50.0f) y = 50.0f;
+	if (y < -50.0f) y = -50.0f;
 
-	return glm::vec3(x+playerPos.x, 0.0f, y+playerPos.z);
+	return glm::vec3(x, 0.0f, y);
 }
 
+void applyPlayerKnockback(glm::vec3 enemyPos, float force) {
+	glm::vec3 knockbackDir = cameraPos - enemyPos;
 
-void player_input(GLFWwindow* window, float cameraSpeed, std::vector<Enemy*> enemies, std::vector<Wall*> walls) {
+	knockbackDir.y = 0.0f;
+
+	float distance = glm::length(knockbackDir);
+	if (distance > 0.001f) {
+		knockbackDir = glm::normalize(knockbackDir);
+	}
+	else {
+		knockbackDir = glm::vec3(0.0f, 0.0f, 1.0f);
+	}
+	cameraPos += knockbackDir * force;
+}
+
+void player_input(GLFWwindow* window, float cameraSpeed, std::vector<Enemy*> enemies, std::vector<Wall*> walls, std::vector<Bullet*>* bullets) {
 
 	glm::vec3 lastPos = cameraPos;
+	bool spacePressed = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
 
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
 		cameraPos += cameraSpeed * cameraFront;
@@ -92,7 +155,13 @@ void player_input(GLFWwindow* window, float cameraSpeed, std::vector<Enemy*> ene
 		cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
 		cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+	if (spacePressed && !spacewaspressed) {
+		glm::vec3 bulletPos = cameraPos + cameraFront * 0.5f;
+		glm::vec3 bulletDir = cameraFront;
+		bullets->push_back(new Bullet(bulletPos, bulletDir));
+	}
 
+	spacewaspressed = spacePressed;
 	AABB playerBox;
 	playerBox.min = cameraPos - glm::vec3(0.25f, 0.0f, 0.25f);
 	playerBox.max = cameraPos + glm::vec3(0.25f, 1.8f, 0.25f);
@@ -106,7 +175,8 @@ void player_input(GLFWwindow* window, float cameraSpeed, std::vector<Enemy*> ene
 
 	for (const auto& enemy : enemies) {
 		if (checkCollision(playerBox, enemy->getCollider())) {
-			cameraPos = lastPos;
+			applyPlayerKnockback(enemy->getPosition(), 2.0f);
+			health -= 10;
 			return;
 		}
 	}
@@ -250,6 +320,7 @@ int main(void)
 	GLFWwindow* window; //Wskaźnik na obiekt reprezentujący okno
 	std::vector<Enemy*> enemies;
 	std::vector<Wall*> walls;
+	std::vector<Bullet*> bullets;
 
 	glfwSetErrorCallback(error_callback);//Zarejestruj procedurę obsługi błędów
 
@@ -295,8 +366,13 @@ int main(void)
 
 		float cameraSpeed = 5.f * deltaTime;
 
-		player_input(window, cameraSpeed, enemies, walls);
-
+		player_input(window, cameraSpeed, enemies, walls, &bullets);
+		if(health <= 0) {
+			std::cout << "Game Over!" << std::endl;
+			break;
+		}
+		std::cout << health << std::endl;
+		ereaseEnemiesandBullets(&enemies, &bullets);
 		drawScene(window, enemies, walls); 
 		glfwPollEvents();
 	}
