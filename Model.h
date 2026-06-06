@@ -19,6 +19,12 @@ public:
         else {
             this->t_diffuse = 0;
         }
+        if (t_specular != nullptr) {
+            this->t_specular = *t_specular;
+        }
+        else {
+            this->t_specular = 0;
+        }
         loadModel(path);
     }
 
@@ -118,7 +124,7 @@ private:
         textures.push_back(diffuse);
 
         Texture specular;
-        specular.id = t_diffuse;
+        specular.id = t_specular;
         specular.type = "texture_specular";
         textures.push_back(specular);
         return Mesh(vertices, indices, textures);
