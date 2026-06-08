@@ -58,6 +58,7 @@ float lastX = 250.0f, lastY = 250.0f;
 bool firstMouse = true;
 
 Model* skeleton_model;
+Model* shotgun;
 
 ShaderProgram *sp;
 
@@ -66,6 +67,8 @@ GLuint skeleton_specular;
 
 GLuint floor_diffuse;
 GLuint wall_diffuse;
+
+GLuint shotgun_diffuse;
 
 bool spacewaspressed = false;
 
@@ -270,6 +273,10 @@ void initOpenGLProgram(GLFWwindow* window) {
 	
 	floor_diffuse = readTexture("floor.png");
 	wall_diffuse = readTexture("wall.png");
+
+	shotgun_diffuse = readTexture("shotgun_diffuse.png");
+	shotgun = new Model("shotgun.glb", &shotgun_diffuse, &shotgun_diffuse);
+
 }
 
 
@@ -286,6 +293,7 @@ void drawScene(GLFWwindow* window, std::vector<Enemy*> enemies, std::vector<Wall
 
 	glm::mat4 V = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 	glm::mat4 P = glm::perspective(glm::radians(45.0f), aspectRatio, 0.01f, 100.0f);
+	glm::mat4 M = glm::mat4(1.0f);
 
 	// Przekazujemy pozycję gracza jako pozycję obserwatora
 	glUniform3fv(glGetUniformLocation(sp->id, "viewPos"), 1, glm::value_ptr(cameraPos));
@@ -304,6 +312,13 @@ void drawScene(GLFWwindow* window, std::vector<Enemy*> enemies, std::vector<Wall
 	glUniformMatrix4fv(sp->u("P"), 1, false, glm::value_ptr(P));
 	glUniformMatrix4fv(sp->u("V"), 1, false, glm::value_ptr(V));
 
+	M = glm::translate(M, cameraPos);
+	M = glm::translate(M, glm::vec3(0.0f, -1.5f, 0.0f));
+	
+	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(M));
+
+	shotgun->Draw(sp->id);
+
 	for (int i = 0; i < walls.size(); i++) {
 		walls[i]->draw(sp);
 	}
@@ -312,6 +327,24 @@ void drawScene(GLFWwindow* window, std::vector<Enemy*> enemies, std::vector<Wall
 		enemies[i]->update(deltaTime, cameraPos);
 		enemies[i]->draw(sp);
 	}
+
+	glm::mat4 viewScreenSpace = glm::mat4(1.0f);
+	glUniformMatrix4fv(sp->u("V"), 1, false, glm::value_ptr(viewScreenSpace));
+
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	glm::mat4 M_shotgun = glm::mat4(1.0f);
+
+
+	M_shotgun = glm::translate(M_shotgun, glm::vec3(0.f, -0.15f, 0.f));
+
+	M_shotgun = glm::rotate(M_shotgun, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+	M_shotgun = glm::scale(M_shotgun, glm::vec3(0.2f, 0.2f, 0.2f));
+
+	glUniformMatrix4fv(sp->u("M"), 1, false, glm::value_ptr(M_shotgun));
+
+	shotgun->Draw(sp->id);
 
 	glfwSwapBuffers(window);
 }
